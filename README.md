@@ -1,8 +1,8 @@
-# :earth_americas: GDP dashboard template
+# Probability Distribution Visualizer
 
-A simple Streamlit app showing the GDP of different countries in the world.
+A simple Streamlit app showing the randomly sampled distributions of various probability random variable types.
 
-[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://gdp-dashboard-template.streamlit.app/)
+[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://prob-visualizer.streamlit.app/)
 
 ### How to run it on your own machine
 
