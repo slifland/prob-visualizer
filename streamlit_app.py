@@ -1,151 +1,111 @@
 import streamlit as st
 import pandas as pd
 import math
-from pathlib import Path
+import random
+import variables
+import altair as alt
+import numpy as np
+from scipy.stats import gaussian_kde
 
-# Set the title and favicon that appear in the Browser's tab bar.
 st.set_page_config(
-    page_title='GDP dashboard',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
+    page_title='Distribution Visualizer',
+    page_icon=':earth_americas:',
+    layout="wide"
 )
 
 # -----------------------------------------------------------------------------
 # Declare some useful functions.
 
-@st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
+def generate_data(variable, n: int) -> list[float]:
+    return [variable.generate() for _ in range(n)]
 
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
-    """
-
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
-
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
-
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
-    )
-
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
-
-    return gdp_df
-
-gdp_df = get_gdp_data()
+def get_plot(variable, n: int):
+    data = generate_data(variable, n)
+    avg = sum(data) / len(data)
+    
+    df = pd.DataFrame(data, columns=['Value'])
+    return df, avg
 
 # -----------------------------------------------------------------------------
 # Draw the actual page
 
-# Set the title that appears at the top of the page.
-'''
-# :earth_americas: GDP dashboard
+st.title("Probability Visualizer")
+st.write("Browse various probability distributions, including sums, quotients, and products.")
 
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
-'''
+st.header('Distribution', divider='gray')
 
-# Add some spacing
-''
-''
+n = st.slider("Number of Trials", 2, 10000, 1000)
 
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
+col1, col2 = st.columns([2, 1])
 
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
+st.session_state.setdefault("selected_variable", None)
 
-countries = gdp_df['Country Code'].unique()
+with col2:
+    st.write("### Variable Configuration")
+    
+    variable_selected = False
+    
+    if st.button("Exponential"):
+        st.session_state.selected_variable = "exponential"
+    if st.button("Uniform"):
+        st.session_state.selected_variable = "uniform"
+    if st.button("Erlang"):
+        st.session_state.selected_variable = "erlang"
+    if st.button("Binomial"):
+        st.session_state.selected_variable = "binomial"
+    if st.button("Poisson"):
+        st.session_state.selected_variable = "poisson"
+    if st.button("Geometric"):
+        st.session_state.selected_variable = "geometric"
+    if st.button("Pascal"):
+        st.session_state.selected_variable = "pascal"
+    
+    variable_type = st.session_state.selected_variable
+    
+    if variable_type:
+        variable_selected = True
+        if variable_type == "exponential":
+            lam = st.slider("Lambda", 0.00001, 1.0, 0.5)
+            x = variables.exponential(lam)
+        elif variable_type == "uniform":
+            a = st.slider("Lower Bound", 0.0, 10.0, 0.0)
+            b = st.slider("Upper Bound", 0.0, 10.0, 1.0)
+            x = variables.uniform(a, b)
+        elif variable_type == "erlang":
+            lam = st.slider("Lambda", 0.00001, 1.0, 0.5)
+            num = st.slider("Number of Successes", 1, 10, 2)
+            x = variables.erlang(lam, num)
+        elif variable_type == "binomial":
+            p = st.slider("Probability", 0.0, 1.0, 0.5)
+            trials = st.slider("Number of Trials", 1, 100, 10)
+            x = variables.binomial(trials, p)
+        elif variable_type == "poisson":
+            lam = st.slider("Lambda", 0.1, 10.0, 1.0)
+            x = variables.poisson(lam)
+        elif variable_type == "geometric":
+            p = st.slider("Probability", 0.0, 1.0, 0.5)
+            x = variables.geometric(p)
+        elif variable_type == "pascal":
+            p = st.slider("Probability", 0.0, 1.0, 0.5)
+            l = st.slider("Number of Successes", 1, 10, 2)
+            x = variables.pascal(p, l)
+        
+        df, avg = get_plot(x, n)
 
-if not len(countries):
-    st.warning("Select at least one country")
+with col1:
+    if variable_selected:
+        st.subheader(f'Average = {avg}')
+        
+        if x.continous:
+            kde = gaussian_kde(df['Value'])
+            x_vals = np.linspace(min(df['Value']), max(df['Value']), 200)
+            y_vals = kde(x_vals)
+            kde_df = pd.DataFrame({'Value': x_vals, 'Density': y_vals})
 
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN'])
-
-''
-''
-''
-
-# Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
-]
-
-st.header('GDP over time', divider='gray')
-
-''
-
-st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
-)
-
-''
-''
-
-
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
-
-st.header(f'GDP in {to_year}', divider='gray')
-
-''
-
-cols = st.columns(4)
-
-for i, country in enumerate(selected_countries):
-    col = cols[i % len(cols)]
-
-    with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
+            chart = alt.Chart(kde_df).mark_line().encode(x='Value', y='Density')
+            st.altair_chart(chart, use_container_width=True)
         else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
-
-        st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
-        )
+            hist_df = df['Value'].value_counts().reset_index()
+            hist_df.columns = ['Value', 'Count']
+            chart = alt.Chart(hist_df).mark_bar().encode(x='Value:O', y='Count')
+            st.altair_chart(chart, use_container_width=True)
